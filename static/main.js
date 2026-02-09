@@ -8,6 +8,7 @@ const btnStop = document.getElementById("btn-stop");
 const btnEnableAll = document.getElementById("btn-enable-all");
 const btnDisableAll = document.getElementById("btn-disable-all");
 const btnZeroAll = document.getElementById("btn-zero-all");
+const btnWave = document.getElementById("btn-wave");
 const btnRefresh = document.getElementById("btn-refresh");
 const presetList = document.getElementById("preset-list");
 const presetNameInput = document.getElementById("preset-name-input");
@@ -242,6 +243,17 @@ socket.on("all_zeroed", () => {
   // positions will be updated via position_update events
 });
 
+socket.on("wave_started", () => {
+  btnWave.disabled = true;
+  btnWave.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Waving...';
+});
+
+socket.on("wave_complete", () => {
+  btnWave.disabled = false;
+  btnWave.innerHTML = '<i class="bi bi-hand-index"></i> Wave';
+  console.log("Wave motion completed");
+});
+
 // Button handlers
 btnStop.addEventListener("click", () => {
   if (!confirm("⚠️ This will immediately cut power to ALL servos!\n\nAre you sure?")) return;
@@ -259,6 +271,10 @@ btnDisableAll.addEventListener("click", () => {
 btnZeroAll.addEventListener("click", () => {
   if (!confirm("Move all servos to 0° position?")) return;
   socket.emit("zero_all");
+});
+
+btnWave.addEventListener("click", () => {
+  socket.emit("wave_motion");
 });
 
 btnRefresh.addEventListener("click", () => {

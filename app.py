@@ -206,6 +206,38 @@ def on_zero_all():
         safe_set_position(name, 0.0)
     emit("all_zeroed", {}, broadcast=True)
 
+@socketio.on("wave_motion")
+def on_wave_motion():
+    """Execute a waving motion sequence"""
+    import threading
+    
+    def wave_sequence():
+        # Wave sequence - adjust servo names and angles for your robot
+        # This assumes a right hand wave motion
+        wave_servos = {
+            "Schulter Horizontal": [-45, 0, -45, 0, -45, 0],  # Shoulder side to side
+            "Ellbogen": [90, 45, 90, 45, 90, 0],  # Elbow bend
+            "Handgelenk": [30, -30, 30, -30, 30, 0],  # Wrist rotate
+            "Zeigefinger": [45, 0, 45, 0, 45, 0],  # Fingers wave
+            "Mittelfinger": [45, 0, 45, 0, 45, 0],
+            "Ringfinger": [45, 0, 45, 0, 45, 0],
+            "Kleiner Finger": [45, 0, 45, 0, 45, 0],
+        }
+        
+        # Execute wave sequence
+        for step in range(6):
+            for servo_name, angles in wave_servos.items():
+                if servo_name in state["servos"]:
+                    safe_set_position(servo_name, angles[step])
+            time.sleep(0.4)  # Delay between steps
+        
+        socketio.emit("wave_complete", {}, broadcast=True)
+    
+    # Run wave in background thread
+    thread = threading.Thread(target=wave_sequence, daemon=True)
+    thread.start()
+    emit("wave_started", {}, broadcast=True)
+
 # Startup
 if __name__ == "__main__":
     load_config()
