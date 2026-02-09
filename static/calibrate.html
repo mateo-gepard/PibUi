@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Calibration Wizard - Humanoid</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <style>
+    :root {
+      --primary: #2563eb;
+      --success: #16a34a;
+      --bg: #f8fafc;
+    }
+    
+    body { 
+      padding: 0;
+      margin: 0;
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    
+    .navbar {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .navbar-brand {
+      font-weight: 700;
+      font-size: 1.5rem;
+      color: white !important;
+    }
+    
+    .wizard-container {
+      max-width: 800px;
+      margin: 2rem auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+      padding: 2rem;
+    }
+    
+    .progress-container {
+      margin-bottom: 2rem;
+    }
+    
+    .servo-preview {
+      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      border-radius: 10px;
+      padding: 2rem;
+      text-align: center;
+      margin: 2rem 0;
+    }
+    
+    .servo-preview h3 {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #92400e;
+      margin-bottom: 0.5rem;
+    }
+    
+    .servo-preview .meta {
+      font-family: 'Courier New', monospace;
+      color: #78350f;
+    }
+    
+    .live-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      background: #16a34a;
+      border-radius: 50%;
+      margin-right: 8px;
+      animation: blink 1s infinite;
+    }
+    
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0.3; }
+    }
+    
+    .angle-display {
+      font-size: 3rem;
+      font-weight: 700;
+      color: var(--primary);
+      font-family: 'Courier New', monospace;
+      margin: 1rem 0;
+    }
+    
+    .trim-controls {
+      background: #f3f4f6;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+    }
+    
+    .btn-wizard {
+      padding: 0.75rem 2rem;
+      font-weight: 600;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-dark">
+    <div class="container-fluid">
+      <span class="navbar-brand">
+        <i class="bi bi-gear-fill"></i> Calibration Wizard
+      </span>
+      <a href="/" class="btn btn-sm btn-outline-light">
+        <i class="bi bi-arrow-left"></i> Back to Control
+      </a>
+    </div>
+  </nav>
+
+  <div class="wizard-container">
+    <div class="progress-container">
+      <div class="d-flex justify-content-between mb-2">
+        <span>Progress</span>
+        <span><strong id="progress-text">0 / 0</strong></span>
+      </div>
+      <div class="progress" style="height: 8px;">
+        <div id="progress-bar" class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <div class="servo-preview">
+      <div class="mb-2">
+        <span class="live-indicator"></span>
+        <span class="badge bg-primary">LIVE</span>
+      </div>
+      <h3 id="servo-name">---</h3>
+      <div class="meta" id="servo-meta">Brick - • CH-</div>
+      <div class="angle-display" id="angle-display">0.0°</div>
+    </div>
+
+    <div class="trim-controls">
+      <h5 class="mb-3"><i class="bi bi-sliders"></i> Trim & Test</h5>
+      
+      <div class="mb-3">
+        <label class="form-label">Position (degrees)</label>
+        <input type="range" id="position-slider" class="form-range" min="-90" max="90" step="1" value="0">
+      </div>
+      
+      <div class="row g-2 mb-3">
+        <div class="col">
+          <button class="btn btn-outline-secondary w-100" id="btn-minus-10">-10°</button>
+        </div>
+        <div class="col">
+          <button class="btn btn-outline-secondary w-100" id="btn-minus-1">-1°</button>
+        </div>
+        <div class="col">
+          <button class="btn btn-outline-primary w-100" id="btn-zero">0°</button>
+        </div>
+        <div class="col">
+          <button class="btn btn-outline-secondary w-100" id="btn-plus-1">+1°</button>
+        </div>
+        <div class="col">
+          <button class="btn btn-outline-secondary w-100" id="btn-plus-10">+10°</button>
+        </div>
+      </div>
+      
+      <div class="mb-3">
+        <label class="form-label">Trim Offset (for zero calibration)</label>
+        <input type="number" id="trim-input" class="form-control" value="0" step="0.5">
+        <div class="form-text">Enter offset to adjust mechanical zero point</div>
+      </div>
+      
+      <div class="form-check form-switch mb-3">
+        <input class="form-check-input" type="checkbox" id="enable-servo">
+        <label class="form-check-label" for="enable-servo">
+          <strong>Enable Servo</strong> (turn on power)
+        </label>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-between mt-4">
+      <button class="btn btn-outline-secondary btn-wizard" id="btn-prev" disabled>
+        <i class="bi bi-arrow-left"></i> Previous
+      </button>
+      <button class="btn btn-outline-success btn-wizard" id="btn-save-trim">
+        <i class="bi bi-save"></i> Save Trim
+      </button>
+      <button class="btn btn-primary btn-wizard" id="btn-next">
+        Next <i class="bi bi-arrow-right"></i>
+      </button>
+    </div>
+
+    <div class="alert alert-info mt-4" role="alert">
+      <i class="bi bi-info-circle"></i>
+      <strong>Instructions:</strong> 
+      Enable the servo, move it to find the natural zero position, 
+      then set a trim offset if needed. Click "Save Trim" to store, 
+      then proceed to the next servo.
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    const socket = io();
+    
+    const servoNameEl = document.getElementById("servo-name");
+    const servoMetaEl = document.getElementById("servo-meta");
+    const angleDisplayEl = document.getElementById("angle-display");
+    const progressText = document.getElementById("progress-text");
+    const progressBar = document.getElementById("progress-bar");
+    const positionSlider = document.getElementById("position-slider");
+    const trimInput = document.getElementById("trim-input");
+    const enableCheckbox = document.getElementById("enable-servo");
+    const btnPrev = document.getElementById("btn-prev");
+    const btnNext = document.getElementById("btn-next");
+    const btnSaveTrim = document.getElementById("btn-save-trim");
+    const btnMinus10 = document.getElementById("btn-minus-10");
+    const btnMinus1 = document.getElementById("btn-minus-1");
+    const btnZero = document.getElementById("btn-zero");
+    const btnPlus1 = document.getElementById("btn-plus-1");
+    const btnPlus10 = document.getElementById("btn-plus-10");
+    
+    let servos = [];
+    let currentIndex = 0;
+    let trimData = {}; // name -> offset
+    
+    socket.on("config", (data) => {
+      servos = Object.keys(data.servos).sort();
+      if (servos.length > 0) {
+        loadServo(0);
+      }
+      updateProgress();
+    });
+    
+    socket.on("position_update", (data) => {
+      if (servos[currentIndex] === data.name) {
+        angleDisplayEl.textContent = `${data.position_deg.toFixed(1)}°`;
+      }
+    });
+    
+    socket.on("enable_update", (data) => {
+      if (servos[currentIndex] === data.name) {
+        enableCheckbox.checked = data.enabled;
+      }
+    });
+    
+    function loadServo(index) {
+      currentIndex = index;
+      const name = servos[index];
+      
+      // Request config for this servo
+      socket.emit("get_positions");
+      
+      servoNameEl.textContent = name;
+      servoMetaEl.textContent = `Servo ${index + 1} of ${servos.length}`;
+      
+      // Load trim if exists
+      trimInput.value = trimData[name] || 0;
+      
+      // Reset position
+      positionSlider.value = 0;
+      angleDisplayEl.textContent = "0.0°";
+      
+      updateProgress();
+      updateButtons();
+    }
+    
+    function updateProgress() {
+      const pct = servos.length > 0 ? ((currentIndex + 1) / servos.length * 100) : 0;
+      progressBar.style.width = `${pct}%`;
+      progressText.textContent = `${currentIndex + 1} / ${servos.length}`;
+    }
+    
+    function updateButtons() {
+      btnPrev.disabled = currentIndex === 0;
+      btnNext.textContent = currentIndex === servos.length - 1 ? "Finish" : "Next";
+    }
+    
+    function setPosition(deg) {
+      const name = servos[currentIndex];
+      positionSlider.value = deg;
+      angleDisplayEl.textContent = `${deg.toFixed(1)}°`;
+      socket.emit("set_position", {name, degree: deg});
+    }
+    
+    positionSlider.addEventListener("input", () => {
+      setPosition(parseFloat(positionSlider.value));
+    });
+    
+    enableCheckbox.addEventListener("change", () => {
+      const name = servos[currentIndex];
+      socket.emit("set_enable", {name, enable: enableCheckbox.checked});
+    });
+    
+    btnMinus10.addEventListener("click", () => {
+      const current = parseFloat(positionSlider.value);
+      setPosition(current - 10);
+    });
+    
+    btnMinus1.addEventListener("click", () => {
+      const current = parseFloat(positionSlider.value);
+      setPosition(current - 1);
+    });
+    
+    btnZero.addEventListener("click", () => {
+      setPosition(0);
+    });
+    
+    btnPlus1.addEventListener("click", () => {
+      const current = parseFloat(positionSlider.value);
+      setPosition(current + 1);
+    });
+    
+    btnPlus10.addEventListener("click", () => {
+      const current = parseFloat(positionSlider.value);
+      setPosition(current + 10);
+    });
+    
+    btnSaveTrim.addEventListener("click", () => {
+      const name = servos[currentIndex];
+      const trim = parseFloat(trimInput.value);
+      trimData[name] = trim;
+      
+      // Save to localStorage
+      localStorage.setItem("humanoid_trim", JSON.stringify(trimData));
+      
+      alert(`✓ Trim saved for ${name}: ${trim}°`);
+    });
+    
+    btnPrev.addEventListener("click", () => {
+      if (currentIndex > 0) {
+        loadServo(currentIndex - 1);
+      }
+    });
+    
+    btnNext.addEventListener("click", () => {
+      if (currentIndex < servos.length - 1) {
+        loadServo(currentIndex + 1);
+      } else {
+        // Finish
+        if (confirm("Calibration complete! Return to control panel?")) {
+          window.location.href = "/";
+        }
+      }
+    });
+    
+    // Load saved trim data
+    const saved = localStorage.getItem("humanoid_trim");
+    if (saved) {
+      trimData = JSON.parse(saved);
+    }
+    
+    console.log("Calibration wizard initialized");
+  </script>
+</body>
+</html>
