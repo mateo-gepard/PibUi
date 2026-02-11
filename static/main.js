@@ -222,7 +222,7 @@ socket.on("enable_update", (data) => {
 });
 
 socket.on("motor_enabled", (data) => {
-  const {name, enabled} = data;
+  const {name, enabled, progress, total} = data;
   if (!servos[name] || !servos[name].ui) {
     console.warn(`motor_enabled: servo ${name} UI not found`);
     return;
@@ -231,7 +231,33 @@ socket.on("motor_enabled", (data) => {
   // Update UI for this specific motor
   servos[name].ui.enable.checked = enabled;
   servos[name].ui.card.classList.toggle("disabled", !enabled);
-  console.log(`Motor ${name} updated to ${enabled}`);
+  
+  // Update button text with progress
+  const action = enabled ? "Enabling" : "Disabling";
+  if (enabled) {
+    btnEnableAll.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${action} ${progress}/${total}...`;
+  } else {
+    btnDisableAll.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${action} ${progress}/${total}...`;
+  }
+  
+  console.log(`Motor ${name} ${action} (${progress}/${total})`);
+});
+
+socket.on("enable_all_started", (data) => {
+  const {enabled, total} = data;
+  const action = enabled ? "Enabling" : "Disabling";
+  
+  // Disable buttons during operation
+  btnEnableAll.disabled = true;
+  btnDisableAll.disabled = true;
+  
+  if (enabled) {
+    btnEnableAll.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${action} 0/${total}...`;
+  } else {
+    btnDisableAll.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${action} 0/${total}...`;
+  }
+  
+  console.log(`Started ${action} ${total} servos with 3s delay...`);
 });
 
 socket.on("positions", (payload) => {
@@ -249,12 +275,23 @@ socket.on("emergency_ack", () => {
 });
 
 socket.on("all_enabled", (data) => {
+  const enabled = data.enabled;
+  
+  // Re-enable buttons and restore text
+  btnEnableAll.disabled = false;
+  btnDisableAll.disabled = false;
+  btnEnableAll.innerHTML = '<i class="bi bi-play-circle"></i> Enable All';
+  btnDisableAll.innerHTML = '<i class="bi bi-pause-circle"></i> Disable All';
+  
+  // Update all servo cards
   for (const name of Object.keys(servos)) {
     if (servos[name].ui) {
-      servos[name].ui.enable.checked = data.enabled;
-      servos[name].ui.card.classList.toggle("disabled", !data.enabled);
+      servos[name].ui.enable.checked = enabled;
+      servos[name].ui.card.classList.toggle("disabled", !enabled);
     }
   }
+  
+  console.log(`All servos ${enabled ? 'enabled' : 'disabled'}`);
 });
 
 socket.on("all_zeroed", () => {

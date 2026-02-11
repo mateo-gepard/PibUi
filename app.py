@@ -236,13 +236,29 @@ def on_enable_all(data):
         names = list(state["servos"].keys())
     
     def enable_sequence():
-        for name in names:
+        total = len(names)
+        for idx, name in enumerate(names, 1):
             set_enable(name, enable)
             # Emit feedback for each motor as it's enabled to all clients
-            socketio.server.emit("motor_enabled", {"name": name, "enabled": enable})
-            time.sleep(0.2)  # 200ms delay between motors
+            socketio.emit("motor_enabled", {
+                "name": name, 
+                "enabled": enable,
+                "progress": idx,
+                "total": total
+            }, broadcast=True)
+            
+            # 3 second delay between each motor (except after the last one)
+            if idx < total:
+                time.sleep(3.0)
+        
         # Final completion signal
-        socketio.server.emit("all_enabled", {"enabled": enable})
+        socketio.emit("all_enabled", {"enabled": enable}, broadcast=True)
+    
+    # Send started signal immediately
+    socketio.emit("enable_all_started", {
+        "enabled": enable, 
+        "total": len(names)
+    }, broadcast=True)
     
     # Run in background thread to avoid blocking
     thread = threading.Thread(target=enable_sequence, daemon=True)
