@@ -4,74 +4,69 @@
     "R": "29Fe"
   },
   "servos": {
+    "Handgelenk": {
+      "brick": "L",
+      "uid": "2h65",
+      "channel": 0
+    },
+    "Ellenbogen": {
+      "brick": "L",
+      "uid": "2h65",
+      "channel": 2
+    },
+    "Unterarm": {
+      "brick": "L",
+      "uid": "2h65",
+      "channel": 4
+    },
+    "Hals": {
+      "brick": "L",
+      "uid": "2h65",
+      "channel": 5
+    },
+    "Schulter_Vertikal": {
+      "brick": "L",
+      "uid": "2h65",
+      "channel": 6
+    },
+    "Schulter_Horizontal": {
+      "brick": "L",
+      "uid": "2h65",
+      "channel": 7
+    },
+    "Oberarm": {
+      "brick": "L",
+      "uid": "2h65",
+      "channel": 8
+    },
     "Daumen": {
       "brick": "R",
       "uid": "29Fe",
       "channel": 0
     },
-    "Handgelenk": {
+    "Daumen_Gelenk": {
       "brick": "R",
       "uid": "29Fe",
-      "channel": 2
-    },
-    "Daumen Gelenk": {
-      "brick": "R",
-      "uid": "29Fe",
-      "channel": 4
-    },
-    "Ellbogen": {
-      "brick": "R",
-      "uid": "29Fe",
-      "channel": 5
+      "channel": 1
     },
     "Zeigefinger": {
       "brick": "R",
       "uid": "29Fe",
-      "channel": 6
-    },
-    "Unterarm": {
-      "brick": "R",
-      "uid": "29Fe",
-      "channel": 7
+      "channel": 4
     },
     "Mittelfinger": {
       "brick": "R",
       "uid": "29Fe",
-      "channel": 8
-    },
-    "Hals": {
-      "brick": "R",
-      "uid": "29Fe",
-      "channel": 9
-    },
-    "Schulter Vertikal": {
-      "brick": "L",
-      "uid": "2h65",
-      "channel": 0
-    },
-    "Schulter Horizontal": {
-      "brick": "L",
-      "uid": "2h65",
-      "channel": 1
-    },
-    "Ringfinger": {
-      "brick": "L",
-      "uid": "2h65",
-      "channel": 4
-    },
-    "Bizeps": {
-      "brick": "L",
-      "uid": "2h65",
       "channel": 5
     },
-    "Kleiner Finger": {
-      "brick": "L",
-      "uid": "2h65",
+    "Ringfinger": {
+      "brick": "R",
+      "uid": "29Fe",
       "channel": 8
     },
-    "Nacken": {
-      "brick": "L",
-      "uid": "2h65",
+    "Kleiner_Finger": {
+      "brick": "R",
+      "uid": "29Fe",
       "channel": 9
     }
   }

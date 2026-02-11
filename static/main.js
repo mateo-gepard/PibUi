@@ -92,6 +92,10 @@ function createServoCard(name, meta) {
         <span class="position-value">${meta.position_deg.toFixed(1)}</span>°
       </div>
       
+      <div class="current-display small text-muted mt-2" style="text-align: center;">
+        <i class="bi bi-lightning-charge"></i> <span class="current-value">0</span> mA
+      </div>
+      
       <div class="slider-container">
         <input type="range" 
                class="form-range slider" 
@@ -128,6 +132,7 @@ function createServoCard(name, meta) {
   const enable = col.querySelector(".enable-toggle");
   const btnZero = col.querySelector(".btn-zero");
   const btnFine = col.querySelector(".btn-fine");
+  const currentValue = col.querySelector(".current-value");
 
   slider.addEventListener("input", () => {
     const val = parseFloat(slider.value);
@@ -166,7 +171,7 @@ function createServoCard(name, meta) {
     }
   });
 
-  return {col, slider, numInput, posDisplay, enable, card};
+  return {col, slider, numInput, posDisplay, enable, card, currentValue};
 }
 
 socket.on("connect", () => {
@@ -216,6 +221,19 @@ socket.on("enable_update", (data) => {
   servos[name].ui.card.classList.toggle("disabled", !enabled);
 });
 
+socket.on("motor_enabled", (data) => {
+  const {name, enabled} = data;
+  if (!servos[name] || !servos[name].ui) {
+    console.warn(`motor_enabled: servo ${name} UI not found`);
+    return;
+  }
+  
+  // Update UI for this specific motor
+  servos[name].ui.enable.checked = enabled;
+  servos[name].ui.card.classList.toggle("disabled", !enabled);
+  console.log(`Motor ${name} updated to ${enabled}`);
+});
+
 socket.on("positions", (payload) => {
   for (const [name, deg] of Object.entries(payload)) {
     if (servos[name] && servos[name].ui) {
@@ -252,6 +270,24 @@ socket.on("wave_complete", () => {
   btnWave.disabled = false;
   btnWave.innerHTML = '<i class="bi bi-hand-index"></i> Wave';
   console.log("Wave motion completed");
+});
+
+socket.on("current_update", (data) => {
+  // Update total current at top
+  const currentDisplay = document.getElementById("current-display");
+  const currentValue = document.getElementById("current-value");
+  if (currentDisplay && currentValue) {
+    currentValue.textContent = Math.round(data.total);
+    currentDisplay.style.display = 'inline-block';
+  }
+  
+  // Update current for each motor
+  const {currents} = data;
+  for (const [name, current] of Object.entries(currents)) {
+    if (servos[name] && servos[name].ui && servos[name].ui.currentValue) {
+      servos[name].ui.currentValue.textContent = Math.round(current);
+    }
+  }
 });
 
 // Button handlers

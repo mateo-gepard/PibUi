@@ -98,6 +98,43 @@ def safe_set_position(name, degree, duration_ms=300):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+def get_current_readings():
+    """Get current readings from all servos"""
+    currents = {}  # name -> current in mA
+    total_current = 0
+    
+    with state_lock:
+        servos = dict(state["servos"])
+        bricks = dict(state["bricks"])
+        connected = state["connected"]
+        mock = state["mock"]
+    
+    if not connected or mock:
+        # Mock mode - return dummy data
+        for name in servos.keys():
+            currents[name] = 50  # Mock: 50mA per servo
+            total_current += 50
+        return {"currents": currents, "total": total_current}
+    
+    try:
+        for name, servo_info in servos.items():
+            brick_key = servo_info["brick"]
+            ch = servo_info["channel"]
+            brick = bricks.get(brick_key)
+            if brick:
+                status = brick.get_status()
+                # status is a named tuple; access current field
+                current = status.current if hasattr(status, 'current') else 0
+                # Handle case where current might be a tuple or named tuple
+                if isinstance(current, (list, tuple)):
+                    current = current[0] if current else 0
+                currents[name] = int(current)
+                total_current += int(current)
+    except Exception as e:
+        print(f"Error reading current: {e}")
+    
+    return {"currents": currents, "total": total_current}
+
 def set_enable(name, enable):
     with state_lock:
         s = state["servos"].get(name)
@@ -156,6 +193,9 @@ def handle_connect():
         "min_deg": v["min_cdeg"] / 100.0,
         "max_deg": v["max_cdeg"] / 100.0
     } for k, v in state["servos"].items()}})
+    # Send current readings immediately on connect
+    #current_data = get_current_readings()
+    emit("current_update", current_data)
 
 @socketio.on("set_position")
 def on_set_position(data):
@@ -194,9 +234,19 @@ def on_enable_all(data):
     enable = bool(data.get("enable", True))
     with state_lock:
         names = list(state["servos"].keys())
-    for name in names:
-        set_enable(name, enable)
-    emit("all_enabled", {"enabled": enable}, broadcast=True)
+    
+    def enable_sequence():
+        for name in names:
+            set_enable(name, enable)
+            # Emit feedback for each motor as it's enabled to all clients
+            socketio.server.emit("motor_enabled", {"name": name, "enabled": enable})
+            time.sleep(0.2)  # 200ms delay between motors
+        # Final completion signal
+        socketio.server.emit("all_enabled", {"enabled": enable})
+    
+    # Run in background thread to avoid blocking
+    thread = threading.Thread(target=enable_sequence, daemon=True)
+    thread.start()
 
 @socketio.on("zero_all")
 def on_zero_all():
@@ -252,5 +302,20 @@ if __name__ == "__main__":
     print(f"  Servos loaded: {len(state['servos'])}")
     print(f"  Mode: {'Mock' if state['mock'] else 'Hardware'}")
     
+    def current_monitor():
+        """Background thread to continuously broadcast current readings"""
+        while True:
+            try:
+                current_data = get_current_readings()
+                socketio.emit("current_update", current_data)
+                time.sleep(0.5)  # Update every 500ms
+            except Exception as e:
+                print(f"Error in current monitor: {e}")
+                time.sleep(1)
+    
+    # Start current monitoring thread
+    #monitor_thread = threading.Thread(target=current_monitor, daemon=True)
+    monitor_thread.start()
+    
     # Note: eventlet or gevent recommended for production SocketIO
-    socketio.run(app, host="0.0.0.0", port=5001, debug=False)
+    socketio.run(app, host="0.0.0.0", port=5001, debug=True)
