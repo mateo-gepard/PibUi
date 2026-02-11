@@ -193,9 +193,6 @@ def handle_connect():
         "min_deg": v["min_cdeg"] / 100.0,
         "max_deg": v["max_cdeg"] / 100.0
     } for k, v in state["servos"].items()}})
-    # Send current readings immediately on connect
-    #current_data = get_current_readings()
-    emit("current_update", current_data)
 
 @socketio.on("set_position")
 def on_set_position(data):
@@ -203,14 +200,14 @@ def on_set_position(data):
     name = data.get("name")
     deg = float(data.get("degree", 0.0))
     res = safe_set_position(name, deg)
-    emit("position_update", {"name": name, "ok": res.get("ok"), "position_deg": res.get("position_cdeg", 0) / 100.0}, broadcast=True)
+    emit("position_update", {"name": name, "ok": res.get("ok"), "position_deg": res.get("position_cdeg", 0) / 100.0})
 
 @socketio.on("set_enable")
 def on_set_enable(data):
     name = data.get("name")
     enable = bool(data.get("enable"))
     res = set_enable(name, enable)
-    emit("enable_update", {"name": name, "ok": res.get("ok"), "enabled": enable}, broadcast=True)
+    emit("enable_update", {"name": name, "ok": res.get("ok"), "enabled": enable})
 
 @socketio.on("emergency_stop")
 def on_emergency_stop():
@@ -221,7 +218,7 @@ def on_emergency_stop():
     for name in names:
         r = set_enable(name, False)
         results[name] = r
-    emit("emergency_ack", {"ok": True}, broadcast=True)
+    emit("emergency_ack", {"ok": True})
 
 @socketio.on("get_positions")
 def on_get_positions():
@@ -240,25 +237,25 @@ def on_enable_all(data):
         for idx, name in enumerate(names, 1):
             set_enable(name, enable)
             # Emit feedback for each motor as it's enabled to all clients
-            socketio.emit("motor_enabled", {
+            socketio.server.emit("motor_enabled", {
                 "name": name, 
                 "enabled": enable,
                 "progress": idx,
                 "total": total
-            }, broadcast=True)
+            }, namespace="/")
             
             # 3 second delay between each motor (except after the last one)
             if idx < total:
                 time.sleep(3.0)
         
         # Final completion signal
-        socketio.emit("all_enabled", {"enabled": enable}, broadcast=True)
+        socketio.server.emit("all_enabled", {"enabled": enable}, namespace="/")
     
     # Send started signal immediately
-    socketio.emit("enable_all_started", {
+    emit("enable_all_started", {
         "enabled": enable, 
         "total": len(names)
-    }, broadcast=True)
+    })
     
     # Run in background thread to avoid blocking
     thread = threading.Thread(target=enable_sequence, daemon=True)
@@ -270,7 +267,7 @@ def on_zero_all():
         names = list(state["servos"].keys())
     for name in names:
         safe_set_position(name, 0.0)
-    emit("all_zeroed", {}, broadcast=True)
+    emit("all_zeroed", {})
 
 @socketio.on("wave_motion")
 def on_wave_motion():
@@ -297,12 +294,12 @@ def on_wave_motion():
                     safe_set_position(servo_name, angles[step])
             time.sleep(0.4)  # Delay between steps
         
-        socketio.emit("wave_complete", {}, broadcast=True)
+        socketio.server.emit("wave_complete", {}, namespace="/")
     
     # Run wave in background thread
     thread = threading.Thread(target=wave_sequence, daemon=True)
     thread.start()
-    emit("wave_started", {}, broadcast=True)
+    emit("wave_started", {})
 
 # Startup
 if __name__ == "__main__":
@@ -318,20 +315,16 @@ if __name__ == "__main__":
     print(f"  Servos loaded: {len(state['servos'])}")
     print(f"  Mode: {'Mock' if state['mock'] else 'Hardware'}")
     
+    #WIP 
     def current_monitor():
         """Background thread to continuously broadcast current readings"""
         while True:
             try:
                 current_data = get_current_readings()
-                socketio.emit("current_update", current_data)
+                socketio.server.emit("current_update", current_data, namespace="/")
                 time.sleep(0.5)  # Update every 500ms
             except Exception as e:
                 print(f"Error in current monitor: {e}")
                 time.sleep(1)
     
-    # Start current monitoring thread
-    #monitor_thread = threading.Thread(target=current_monitor, daemon=True)
-    monitor_thread.start()
-    
-    # Note: eventlet or gevent recommended for production SocketIO
     socketio.run(app, host="0.0.0.0", port=5001, debug=True)
