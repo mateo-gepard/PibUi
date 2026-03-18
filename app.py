@@ -25,8 +25,8 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 state = {
     "connected": False,
     "mock": not TINKER_AVAILABLE,
-    "servos": {},  # name -> {brick_key, uid, channel, enabled, position_cdeg}
-    "bricks": {},  # key -> BrickletServoV2 instance (or mock)
+    "servos": {},
+    "bricks": {}, 
     "ipcon": None
 }
 state_lock = threading.Lock()
@@ -139,20 +139,22 @@ def set_enable(name, enable):
     with state_lock:
         s = state["servos"].get(name)
         if not s:
-            return {"ok": False, "error": "unknown servo"}
+            return {"ok": False, "error": "unknown servo", "enabled": False}
         ch = s["channel"]
         brick_key = s["brick"]
         if state["mock"] or not state["connected"]:
             s["enabled"] = bool(enable)
-            return {"ok": True}
+            return {"ok": True, "enabled": s["enabled"]}
         brick = state["bricks"].get(brick_key)
     try:
         brick.set_enable(ch, bool(enable))
         with state_lock:
             s["enabled"] = bool(enable)
-        return {"ok": True}
+        return {"ok": True, "enabled": s["enabled"]}
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        with state_lock:
+            current_enabled = s["enabled"]
+        return {"ok": False, "error": str(e), "enabled": current_enabled}
 
 # Flask routes
 @app.route("/")
@@ -207,7 +209,7 @@ def on_set_enable(data):
     name = data.get("name")
     enable = bool(data.get("enable"))
     res = set_enable(name, enable)
-    emit("enable_update", {"name": name, "ok": res.get("ok"), "enabled": enable})
+    emit("enable_update", {"name": name, "ok": res.get("ok"), "enabled": res.get("enabled", False)})
 
 @socketio.on("emergency_stop")
 def on_emergency_stop():
@@ -218,6 +220,7 @@ def on_emergency_stop():
     for name in names:
         r = set_enable(name, False)
         results[name] = r
+        emit("enable_update", {"name": name, "ok": r.get("ok"), "enabled": r.get("enabled", False)})
     emit("emergency_ack", {"ok": True})
 
 @socketio.on("get_positions")
@@ -235,21 +238,22 @@ def on_enable_all(data):
     def enable_sequence():
         total = len(names)
         for idx, name in enumerate(names, 1):
-            set_enable(name, enable)
+            res = set_enable(name, enable)
             # Emit feedback for each motor as it's enabled to all clients
-            socketio.server.emit("motor_enabled", {
+            socketio.emit("motor_enabled", {
                 "name": name, 
-                "enabled": enable,
+                "enabled": res.get("enabled", False),
+                "ok": res.get("ok", False),
                 "progress": idx,
                 "total": total
             }, namespace="/")
             
-            # 3 second delay between each motor (except after the last one)
+            # Small delay between each motor
             if idx < total:
-                time.sleep(3.0)
+                time.sleep(0.05)
         
         # Final completion signal
-        socketio.server.emit("all_enabled", {"enabled": enable}, namespace="/")
+        socketio.emit("all_enabled", {}, namespace="/")
     
     # Send started signal immediately
     emit("enable_all_started", {
@@ -266,7 +270,8 @@ def on_zero_all():
     with state_lock:
         names = list(state["servos"].keys())
     for name in names:
-        safe_set_position(name, 0.0)
+        res = safe_set_position(name, 0.0)
+        emit("position_update", {"name": name, "ok": res.get("ok"), "position_deg": res.get("position_cdeg", 0) / 100.0})
     emit("all_zeroed", {})
 
 @socketio.on("wave_motion")
@@ -321,7 +326,7 @@ if __name__ == "__main__":
         while True:
             try:
                 current_data = get_current_readings()
-                socketio.server.emit("current_update", current_data, namespace="/")
+                socketio.emit("current_update", current_data, namespace="/")
                 time.sleep(0.5)  # Update every 500ms
             except Exception as e:
                 print(f"Error in current monitor: {e}")

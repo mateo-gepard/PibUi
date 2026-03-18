@@ -1,6 +1,31 @@
 // static/main.js
 const socket = io();
 
+// Inject CSS for pending animation
+const style = document.createElement('style');
+style.innerHTML = `
+  @keyframes pendingPulse {
+    0% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.4); border-color: rgba(13, 110, 253, 0.6); }
+    70% { box-shadow: 0 0 0 10px rgba(13, 110, 253, 0); border-color: rgba(13, 110, 253, 0.2); }
+    100% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0); border-color: transparent; }
+  }
+  .card-pending {
+    animation: pendingPulse 1.5s infinite !important;
+    opacity: 0.7;
+    pointer-events: none; /* Block further interactions while pending */
+    transition: all 0.2s ease-in-out;
+  }
+  @keyframes errorShake {
+    0%, 100% { transform: translateX(0); box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); border-color: rgba(220, 53, 69, 0.6); }
+    20%, 60% { transform: translateX(-5px); box-shadow: 0 0 0 8px rgba(220, 53, 69, 0); border-color: rgba(220, 53, 69, 0.8); }
+    40%, 80% { transform: translateX(5px); box-shadow: 0 0 0 8px rgba(220, 53, 69, 0); border-color: rgba(220, 53, 69, 0.8); }
+  }
+  .card-error {
+    animation: errorShake 0.5s ease-in-out !important;
+  }
+`;
+document.head.appendChild(style);
+
 // UI elements
 const statusBadge = document.getElementById("status");
 const grid = document.getElementById("servo-grid");
@@ -102,7 +127,8 @@ function createServoCard(name, meta) {
                min="${meta.min_deg}" 
                max="${meta.max_deg}" 
                step="0.5" 
-               value="${meta.position_deg}">
+               value="${meta.position_deg}"
+               ${meta.enabled ? '' : 'disabled'}>
         <div class="d-flex justify-content-between small text-muted mt-1">
           <span>${meta.min_deg}°</span>
           <span>${meta.max_deg}°</span>
@@ -113,7 +139,8 @@ function createServoCard(name, meta) {
         <input type="number" 
                class="form-control form-control-sm input-number position-input" 
                value="${meta.position_deg.toFixed(1)}"
-               step="0.5">
+               step="0.5"
+               ${meta.enabled ? '' : 'disabled'}>
         <button class="btn btn-sm btn-outline-secondary btn-zero" title="Zero position">
           <i class="bi bi-bullseye"></i>
         </button>
@@ -154,8 +181,8 @@ function createServoCard(name, meta) {
   
   enable.addEventListener("change", () => {
     const enabled = enable.checked;
+    card.classList.add("card-pending");
     socket.emit("set_enable", {name, enable: enabled});
-    card.classList.toggle("disabled", !enabled);
   });
   
   btnZero.addEventListener("click", () => {
@@ -214,23 +241,45 @@ socket.on("position_update", (data) => {
 });
 
 socket.on("enable_update", (data) => {
-  const {name, enabled} = data;
+  const {name, enabled, ok} = data;
   if (!servos[name] || !servos[name].ui) return;
   
+  servos[name].ui.card.classList.remove("card-pending");
+  
+  if (ok === false) {
+    servos[name].ui.card.classList.add("card-error");
+    setTimeout(() => {
+      if (servos[name] && servos[name].ui) servos[name].ui.card.classList.remove("card-error");
+    }, 500);
+  }
+
   servos[name].ui.enable.checked = enabled;
   servos[name].ui.card.classList.toggle("disabled", !enabled);
+  servos[name].ui.slider.disabled = !enabled;
+  servos[name].ui.numInput.disabled = !enabled;
 });
 
 socket.on("motor_enabled", (data) => {
-  const {name, enabled, progress, total} = data;
+  const {name, enabled, progress, total, ok} = data;
   if (!servos[name] || !servos[name].ui) {
     console.warn(`motor_enabled: servo ${name} UI not found`);
     return;
   }
   
+  servos[name].ui.card.classList.remove("card-pending");
+  
+  if (ok === false) {
+    servos[name].ui.card.classList.add("card-error");
+    setTimeout(() => {
+      if (servos[name] && servos[name].ui) servos[name].ui.card.classList.remove("card-error");
+    }, 500);
+  }
+
   // Update UI for this specific motor
   servos[name].ui.enable.checked = enabled;
   servos[name].ui.card.classList.toggle("disabled", !enabled);
+  servos[name].ui.slider.disabled = !enabled;
+  servos[name].ui.numInput.disabled = !enabled;
   
   // Update button text with progress
   const action = enabled ? "Enabling" : "Disabling";
@@ -271,6 +320,9 @@ socket.on("positions", (payload) => {
 });
 
 socket.on("emergency_ack", () => {
+  Object.values(servos).forEach(s => {
+    if (s.ui && s.ui.card) s.ui.card.classList.remove("card-pending");
+  });
   alert("Emergency stop executed. All servos disabled.");
 });
 
@@ -283,15 +335,11 @@ socket.on("all_enabled", (data) => {
   btnEnableAll.innerHTML = '<i class="bi bi-play-circle"></i> Enable All';
   btnDisableAll.innerHTML = '<i class="bi bi-pause-circle"></i> Disable All';
   
-  // Update all servo cards
-  for (const name of Object.keys(servos)) {
-    if (servos[name].ui) {
-      servos[name].ui.enable.checked = enabled;
-      servos[name].ui.card.classList.toggle("disabled", !enabled);
-    }
-  }
+  Object.values(servos).forEach(s => {
+    if (s.ui && s.ui.card) s.ui.card.classList.remove("card-pending");
+  });
   
-  console.log(`All servos ${enabled ? 'enabled' : 'disabled'}`);
+  console.log("All servos operation completed");
 });
 
 socket.on("all_zeroed", () => {
@@ -330,14 +378,23 @@ socket.on("current_update", (data) => {
 // Button handlers
 btnStop.addEventListener("click", () => {
   if (!confirm("⚠️ This will immediately cut power to ALL servos!\n\nAre you sure?")) return;
+  Object.values(servos).forEach(s => {
+    if (s.ui && s.ui.card) s.ui.card.classList.add("card-pending");
+  });
   socket.emit("emergency_stop");
 });
 
 btnEnableAll.addEventListener("click", () => {
+  Object.values(servos).forEach(s => {
+    if (s.ui && s.ui.card) s.ui.card.classList.add("card-pending");
+  });
   socket.emit("enable_all", {enable: true});
 });
 
 btnDisableAll.addEventListener("click", () => {
+  Object.values(servos).forEach(s => {
+    if (s.ui && s.ui.card) s.ui.card.classList.add("card-pending");
+  });
   socket.emit("enable_all", {enable: false});
 });
 
