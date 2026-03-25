@@ -2,6 +2,7 @@
 from flask import Flask, send_from_directory, jsonify
 from flask_socketio import SocketIO, emit
 import json
+import os
 import threading
 import time
 
@@ -27,11 +28,13 @@ state = {
     "mock": not TINKER_AVAILABLE,
     "servos": {},
     "bricks": {}, 
-    "ipcon": None
+    "ipcon": None,
+    "servo_initialized": set()  # Track which servos have been hardware-configured
 }
 state_lock = threading.Lock()
 monitor_thread = None
 monitor_lock = threading.Lock()
+monitor_stop = threading.Event()  # #17: Shutdown mechanism for monitor thread
 
 # Helpers
 def load_config():
@@ -47,21 +50,24 @@ def load_config():
     with state_lock:
         state["servos"] = {}
         state["bricks_cfg"] = bricks_cfg
+        state["servo_initialized"] = set()
         # initialize servo entries
         for name, meta in servos.items():
             state["servos"][name] = {
                 "brick": meta["brick"],
-                "uid": meta.get("uid"),
                 "channel": meta["channel"],
                 "enabled": False,
                 "position_cdeg": 0,   # centi-degrees
                 "min_cdeg": -9000,
-                "max_cdeg": 9000
+                "max_cdeg": 9000,
+                "trim_cdeg": 0  # #5: Calibration trim offset
             }
 
 def connect_tinker():
     if state["mock"]:
-        state["connected"] = False
+        # #6: In mock mode, set connected=True so the UI can show "Mock Mode"
+        with state_lock:
+            state["connected"] = True
         return
     ipcon = IPConnection()
     ipcon.connect(HOST, PORT_TF)
@@ -74,8 +80,28 @@ def connect_tinker():
         state["bricks"] = bricks
         state["connected"] = True
 
+def _serialize_servo(name, meta):
+    """#14: Shared helper to build a servo info dict for the client."""
+    return {
+        "brick": meta["brick"],
+        "channel": meta["channel"],
+        "enabled": meta["enabled"],
+        "position_deg": meta["position_cdeg"] / 100.0,
+        "min_deg": meta["min_cdeg"] / 100.0,
+        "max_deg": meta["max_cdeg"] / 100.0,
+        "trim_deg": meta.get("trim_cdeg", 0) / 100.0
+    }
+
+def _init_servo_hardware(brick, ch, min_cdeg, max_cdeg):
+    """#13: One-time hardware configuration per servo channel."""
+    brick.set_degree(ch, min_cdeg, max_cdeg)
+    brick.set_pulse_width(ch, 500, 2500)
+    brick.set_period(ch, 20000)
+    brick.set_motion_configuration(ch, 15000, 15000, 15000)
+
 def safe_set_position(name, degree, duration_ms=300):
     # degree is float degrees (e.g., 30.5). Convert to centi-deg
+    # #3: Hold the lock for the entire operation on state, copy needed values
     with state_lock:
         s = state["servos"].get(name)
         if not s:
@@ -84,17 +110,22 @@ def safe_set_position(name, degree, duration_ms=300):
         target_cdeg = max(s["min_cdeg"], min(s["max_cdeg"], target_cdeg))
         brick_key = s["brick"]
         ch = s["channel"]
-        if state["mock"] or not state["connected"]:
+        min_cdeg = s["min_cdeg"]
+        max_cdeg = s["max_cdeg"]
+        is_mock = state["mock"]
+        is_connected = state["connected"]
+        if is_mock or not is_connected:
             s["position_cdeg"] = target_cdeg
             return {"ok": True, "position_cdeg": target_cdeg}
         brick = state["bricks"].get(brick_key)
+        servo_key = f"{brick_key}:{ch}"
+        needs_init = servo_key not in state["servo_initialized"]
     try:
-        # Set degree range and safety - only once per servo ideally
-        brick.set_degree(ch, s["min_cdeg"], s["max_cdeg"])
-        brick.set_pulse_width(ch, 500, 2500)
-        brick.set_period(ch, 20000)
-        # Set velocity, acceleration, and deceleration for smooth, slower movements
-        brick.set_motion_configuration(ch, 15000, 15000, 15000)
+        # #13: Only configure hardware on first use
+        if needs_init:
+            _init_servo_hardware(brick, ch, min_cdeg, max_cdeg)
+            with state_lock:
+                state["servo_initialized"].add(servo_key)
         brick.set_position(ch, target_cdeg)
         with state_lock:
             s["position_cdeg"] = target_cdeg
@@ -136,7 +167,6 @@ def get_current_readings():
                     total_current += int(current)
                 except Exception as e:
                     failed_bricks.add(brick_key)
-                    # Only print once per failed brick and simplify the timeout message
                     if "in time (-1)" in str(e):
                         print(f"Timeout reading current for brick '{brick_key}' (skipping remaining servos on this brick)")
                     else:
@@ -147,13 +177,16 @@ def get_current_readings():
     return {"currents": currents, "total": total_current}
 
 def set_enable(name, enable):
+    # #4: Copy values from state inside lock, operate on hardware outside
     with state_lock:
         s = state["servos"].get(name)
         if not s:
             return {"ok": False, "error": "unknown servo", "enabled": False}
         ch = s["channel"]
         brick_key = s["brick"]
-        if state["mock"] or not state["connected"]:
+        is_mock = state["mock"]
+        is_connected = state["connected"]
+        if is_mock or not is_connected:
             s["enabled"] = bool(enable)
             return {"ok": True, "enabled": s["enabled"]}
         brick = state["bricks"].get(brick_key)
@@ -161,7 +194,7 @@ def set_enable(name, enable):
         brick.set_enable(ch, bool(enable))
         with state_lock:
             s["enabled"] = bool(enable)
-        return {"ok": True, "enabled": s["enabled"]}
+        return {"ok": True, "enabled": bool(enable)}
     except Exception as e:
         with state_lock:
             current_enabled = s["enabled"]
@@ -170,7 +203,8 @@ def set_enable(name, enable):
 # Background Monitor
 def current_monitor():
     """Background thread to continuously broadcast current readings"""
-    while True:
+    # #17: Use stop event for clean shutdown
+    while not monitor_stop.is_set():
         try:
             current_data = get_current_readings()
             socketio.emit("current_update", current_data, namespace="/")
@@ -188,23 +222,19 @@ def index():
 def calibrate_page():
     return send_from_directory("static", "calibrate.html")
 
+@app.route("/discover")
+def discover_page():
+    return send_from_directory("static", "discover.html")
+
 @app.route("/config.json")
 def config_json():
-    # Return the mapping and some meta
+    # #11: Hold lock for entire payload construction
     with state_lock:
         servos = state["servos"]
-    # Build a compact payload: name -> meta
-    payload = {}
-    for name, meta in servos.items():
-        payload[name] = {
-            "brick": meta["brick"],
-            "channel": meta["channel"],
-            "enabled": meta["enabled"],
-            "position_deg": meta["position_cdeg"] / 100.0,
-            "min_deg": meta["min_cdeg"] / 100.0,
-            "max_deg": meta["max_cdeg"] / 100.0
-        }
-    return jsonify({"servos": payload, "connected": state["connected"], "mock": state["mock"]})
+        payload = {name: _serialize_servo(name, meta) for name, meta in servos.items()}
+        connected = state["connected"]
+        mock = state["mock"]
+    return jsonify({"servos": payload, "connected": connected, "mock": mock})
 
 # Socket.IO events
 @socketio.on("connect")
@@ -212,28 +242,37 @@ def handle_connect():
     global monitor_thread
     with monitor_lock:
         if monitor_thread is None:
+            monitor_stop.clear()
             monitor_thread = socketio.start_background_task(current_monitor)
             
-    emit("status", {"connected": state["connected"], "mock": state["mock"]})
-    emit("config", {"servos": {k: {
-        "brick": v["brick"],
-        "channel": v["channel"],
-        "enabled": v["enabled"],
-        "position_deg": v["position_cdeg"] / 100.0,
-        "min_deg": v["min_cdeg"] / 100.0,
-        "max_deg": v["max_cdeg"] / 100.0
-    } for k, v in state["servos"].items()}})
+    with state_lock:
+        connected = state["connected"]
+        mock = state["mock"]
+        servo_payload = {k: _serialize_servo(k, v) for k, v in state["servos"].items()}
+    
+    emit("status", {"connected": connected, "mock": mock})
+    emit("config", {"servos": servo_payload})
 
 @socketio.on("set_position")
 def on_set_position(data):
-    # data: {name, degree}
+    # #12: Validate incoming data
+    if not isinstance(data, dict):
+        emit("position_update", {"name": None, "ok": False, "position_deg": 0})
+        return
     name = data.get("name")
-    deg = float(data.get("degree", 0.0))
+    try:
+        deg = float(data.get("degree", 0.0))
+    except (TypeError, ValueError):
+        emit("position_update", {"name": name, "ok": False, "position_deg": 0})
+        return
     res = safe_set_position(name, deg)
     emit("position_update", {"name": name, "ok": res.get("ok"), "position_deg": res.get("position_cdeg", 0) / 100.0})
 
 @socketio.on("set_enable")
 def on_set_enable(data):
+    # #12: Validate incoming data
+    if not isinstance(data, dict):
+        return
     name = data.get("name")
     enable = bool(data.get("enable"))
     res = set_enable(name, enable)
@@ -259,6 +298,9 @@ def on_get_positions():
 
 @socketio.on("enable_all")
 def on_enable_all(data):
+    # #12: Validate incoming data
+    if not isinstance(data, dict):
+        return
     enable = bool(data.get("enable", True))
     with state_lock:
         names = list(state["servos"].keys())
@@ -280,8 +322,8 @@ def on_enable_all(data):
             if idx < total:
                 socketio.sleep(0.05)
         
-        # Final completion signal
-        socketio.emit("all_enabled", {}, namespace="/")
+        # #2: Send the enable state back so client knows what completed
+        socketio.emit("all_enabled", {"enabled": enable}, namespace="/")
     
     # Send started signal immediately
     emit("enable_all_started", {
@@ -301,46 +343,165 @@ def on_zero_all():
         emit("position_update", {"name": name, "ok": res.get("ok"), "position_deg": res.get("position_cdeg", 0) / 100.0})
     emit("all_zeroed", {})
 
+@socketio.on("set_trim")
+def on_set_trim(data):
+    """#5: Receive and store trim offset from calibration wizard."""
+    if not isinstance(data, dict):
+        return
+    name = data.get("name")
+    try:
+        trim_deg = float(data.get("trim", 0.0))
+    except (TypeError, ValueError):
+        emit("trim_update", {"name": name, "ok": False})
+        return
+    with state_lock:
+        s = state["servos"].get(name)
+        if not s:
+            emit("trim_update", {"name": name, "ok": False, "error": "unknown servo"})
+            return
+        s["trim_cdeg"] = int(round(trim_deg * 100))
+    emit("trim_update", {"name": name, "ok": True, "trim_deg": trim_deg})
+
 @socketio.on("wave_motion")
 def on_wave_motion():
     
     def wave_sequence():
-        # Wave sequence - adjust servo names and angles for your robot
-        # This assumes a right hand wave motion
         wave_servos = {
-            "Schulter Horizontal": [-45, 0, -45, 0, -45, 0],  # Shoulder side to side
-            "Ellbogen": [90, 45, 90, 45, 90, 0],  # Elbow bend
-            "Handgelenk": [30, -30, 30, -30, 30, 0],  # Wrist rotate
-            "Zeigefinger": [45, 0, 45, 0, 45, 0],  # Fingers wave
+            "Schulter_Horizontal": [-45, 0, -45, 0, -45, 0],
+            "Ellenbogen": [90, 45, 90, 45, 90, 0],
+            "Handgelenk": [30, -30, 30, -30, 30, 0],
+            "Zeigefinger": [45, 0, 45, 0, 45, 0],
             "Mittelfinger": [45, 0, 45, 0, 45, 0],
             "Ringfinger": [45, 0, 45, 0, 45, 0],
-            "Kleiner Finger": [45, 0, 45, 0, 45, 0],
+            "Kleiner_Finger": [45, 0, 45, 0, 45, 0],
         }
-        
-        # Execute wave sequence
         for step in range(6):
             for servo_name, angles in wave_servos.items():
                 if servo_name in state["servos"]:
                     safe_set_position(servo_name, angles[step])
-            socketio.sleep(0.4)  # Delay between steps
-        
-        socketio.server.emit("wave_complete", {}, namespace="/")
+            socketio.sleep(0.4)
+        socketio.emit("wave_complete", {}, namespace="/")
     
-    # Run wave in background thread
     socketio.start_background_task(wave_sequence)
     emit("wave_started", {})
+
+# ─── Motor Discovery ───
+NUM_CHANNELS = 10  # Servo Brick V2 has channels 0-9
+
+@socketio.on("discovery_start")
+def on_discovery_start():
+    """List all brick/channel combos for discovery."""
+    with state_lock:
+        bricks_cfg = dict(state.get("bricks_cfg", {}))
+    channels = []
+    for brick_key in sorted(bricks_cfg.keys()):
+        for ch in range(NUM_CHANNELS):
+            channels.append({"brick": brick_key, "channel": ch})
+    emit("discovery_channels", {"channels": channels, "bricks": bricks_cfg})
+
+@socketio.on("discovery_test")
+def on_discovery_test(data):
+    """Nudge a specific brick/channel to identify the motor."""
+    if not isinstance(data, dict):
+        emit("discovery_test_done", {"ok": False, "error": "invalid data"})
+        return
+    brick_key = data.get("brick")
+    ch = data.get("channel")
+    if brick_key is None or ch is None:
+        emit("discovery_test_done", {"ok": False, "error": "missing brick/channel"})
+        return
+    ch = int(ch)
+
+    with state_lock:
+        is_mock = state["mock"]
+        brick = state["bricks"].get(brick_key)
+
+    if is_mock:
+        # Simulate a test delay in mock mode
+        socketio.sleep(0.8)
+        emit("discovery_test_done", {"ok": True, "brick": brick_key, "channel": ch})
+        return
+
+    if not brick:
+        emit("discovery_test_done", {"ok": False, "error": f"brick {brick_key} not found"})
+        return
+
+    def nudge():
+        try:
+            brick.set_degree(ch, -9000, 9000)
+            brick.set_pulse_width(ch, 500, 2500)
+            brick.set_period(ch, 20000)
+            brick.set_motion_configuration(ch, 50000, 50000, 50000)
+            brick.set_enable(ch, True)
+            socketio.sleep(0.15)
+            brick.set_position(ch, 2000)  # +20 degrees
+            socketio.sleep(0.5)
+            brick.set_position(ch, -2000)  # -20 degrees
+            socketio.sleep(0.5)
+            brick.set_position(ch, 0)
+            socketio.sleep(0.3)
+            brick.set_enable(ch, False)
+            socketio.emit("discovery_test_done", {"ok": True, "brick": brick_key, "channel": ch}, namespace="/")
+        except Exception as e:
+            try:
+                brick.set_enable(ch, False)
+            except Exception:
+                pass
+            socketio.emit("discovery_test_done", {"ok": False, "error": str(e)}, namespace="/")
+
+    socketio.start_background_task(nudge)
+
+@socketio.on("discovery_save")
+def on_discovery_save(data):
+    """Save discovered motor assignments to servo_config.json."""
+    if not isinstance(data, dict):
+        emit("discovery_saved", {"ok": False, "error": "invalid data"})
+        return
+    entries = data.get("assignments", [])
+    if not entries:
+        emit("discovery_saved", {"ok": False, "error": "no assignments"})
+        return
+
+    with state_lock:
+        bricks_cfg = dict(state.get("bricks_cfg", {}))
+
+    new_servos = {}
+    for entry in entries:
+        name = entry.get("name", "").strip()
+        brick = entry.get("brick", "")
+        channel = entry.get("channel")
+        if name and brick and channel is not None:
+            new_servos[name] = {"brick": brick, "channel": int(channel)}
+
+    new_config = {"bricks": bricks_cfg, "servos": new_servos}
+
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(new_config, f, indent=2, ensure_ascii=False)
+        # Reload the config
+        load_config()
+        emit("discovery_saved", {"ok": True, "count": len(new_servos)})
+    except Exception as e:
+        emit("discovery_saved", {"ok": False, "error": str(e)})
 
 # Startup
 if __name__ == "__main__":
     load_config()
     try:
         connect_tinker()
-        print(f"✓ Connected to Tinkerforge at {HOST}:{PORT_TF}")
+        if state["mock"]:
+            print(f"✓ Running in Mock mode (Tinkerforge not available)")
+        else:
+            print(f"✓ Connected to Tinkerforge at {HOST}:{PORT_TF}")
     except Exception as e:
         print(f"⚠ Could not connect to Tinkerforge: {e}")
         state["connected"] = False
     
+    # #23: Configurable debug mode via environment variable
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() in ("true", "1", "yes")
+    
     print(f"✓ Server starting on http://0.0.0.0:5001")
     print(f"  Servos loaded: {len(state['servos'])}")
     print(f"  Mode: {'Mock' if state['mock'] else 'Hardware'}")
-    socketio.run(app, host="0.0.0.0", port=5001, debug=True)
+    print(f"  Debug: {debug_mode}")
+    socketio.run(app, host="0.0.0.0", port=5001, debug=debug_mode)

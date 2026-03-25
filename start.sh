@@ -17,7 +17,7 @@ if [ ! -f "servo_config.json" ]; then
 fi
 
 # Start the server
-echo "🚀 Launching server on http://localhost:5000"
+echo "🚀 Launching server on http://localhost:5001"
 echo "   Press Ctrl+C to stop"
 echo ""
 

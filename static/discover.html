@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pib — Motor Discovery</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="/static/common.css">
+  <style>
+    .discover-wrap {
+      max-width: 900px;
+      margin: 1.5rem auto;
+    }
+
+    /* ─── Screens ─── */
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* ─── Start Screen ─── */
+    .start-hero {
+      text-align: center;
+      padding: 3rem 1.5rem;
+    }
+    .start-hero .icon-large {
+      font-size: 4rem;
+      background: linear-gradient(135deg, var(--accent), var(--success));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 1rem;
+    }
+    .start-hero h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+    .start-hero p {
+      color: var(--text-secondary);
+      max-width: 500px;
+      margin: 0 auto 1.5rem;
+      line-height: 1.6;
+    }
+    .hat-badges {
+      display: flex;
+      justify-content: center;
+      gap: 0.75rem;
+      margin: 1.5rem 0;
+    }
+    .hat-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 1rem;
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+    .hat-badge .hat-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .hat-dot.hat-l { background: var(--info); box-shadow: 0 0 6px var(--info-glow); }
+    .hat-dot.hat-r { background: #f472b6; box-shadow: 0 0 6px rgba(244,114,182,0.3); }
+
+    /* ─── Test Screen ─── */
+    .test-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .channel-hero {
+      text-align: center;
+      padding: 2rem;
+      border-radius: var(--radius-lg);
+      background: linear-gradient(135deg, rgba(129,140,248,0.1), rgba(56,189,248,0.08));
+      border: 1px solid rgba(129,140,248,0.15);
+      margin-bottom: 1.25rem;
+    }
+    .channel-hero .ch-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.4rem;
+    }
+    .channel-hero .ch-name {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+    }
+    .channel-hero .ch-name .hat-tag {
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      margin-right: 4px;
+    }
+    .hat-tag-l { background: rgba(56,189,248,0.15); color: var(--info); }
+    .hat-tag-r { background: rgba(244,114,182,0.15); color: #f472b6; }
+
+    .test-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 1rem 2.5rem;
+      border-radius: var(--radius-md);
+      border: 2px solid var(--accent);
+      background: rgba(129,140,248,0.12);
+      color: var(--accent);
+      font-family: 'Inter', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin: 1rem 0;
+    }
+    .test-btn:hover {
+      background: rgba(129,140,248,0.25);
+      box-shadow: 0 0 30px var(--accent-glow);
+      transform: scale(1.04);
+    }
+    .test-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    .test-btn.testing {
+      animation: pendingPulse 1.5s infinite;
+    }
+
+    /* ─── Body Part Picker ─── */
+    .picker-section {
+      margin-top: 1.25rem;
+    }
+    .picker-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.5rem;
+    }
+    .picker-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-bottom: 0.75rem;
+    }
+    .picker-btn {
+      padding: 0.4rem 0.85rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-secondary);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .picker-btn:hover {
+      background: var(--surface-hover);
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
+    .picker-btn.selected {
+      background: rgba(129,140,248,0.2);
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+    .custom-name-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .custom-name-row input { flex: 1; }
+
+    /* ─── Test Nav ─── */
+    .test-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ─── Summary Screen ─── */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.6rem;
+      margin: 1rem 0;
+    }
+    .summary-card {
+      padding: 0.75rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-size: 0.82rem;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .summary-card:hover {
+      border-color: var(--border-hover);
+      background: var(--surface-hover);
+    }
+    .summary-card .sc-header {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-bottom: 0.3rem;
+    }
+    .summary-card .sc-name {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .summary-card .sc-name.unassigned {
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    .summary-card .sc-actions {
+      display: flex;
+      gap: 0.3rem;
+      margin-top: 0.4rem;
+    }
+    .summary-card .sc-actions button {
+      padding: 0.2rem 0.5rem;
+      font-size: 0.7rem;
+    }
+
+    .summary-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1.25rem;
+    }
+
+    .save-result {
+      text-align: center;
+      padding: 2rem;
+      display: none;
+    }
+    .save-result.show { display: block; }
+    .save-result i {
+      font-size: 3rem;
+      color: var(--success);
+      margin-bottom: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+      <span class="navbar-brand">
+        <i class="bi bi-search"></i> Motor Discovery
+      </span>
+      <div class="nav-links">
+        <a href="/" class="nav-link-btn"><i class="bi bi-arrow-left"></i> Control Panel</a>
+        <a href="/calibrate" class="nav-link-btn"><i class="bi bi-gear"></i> Calibrate</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="content-wrap">
+    <div class="discover-wrap">
+
+      <!-- SCREEN 1: Start -->
+      <div class="screen active" id="screen-start">
+        <div class="glass-card">
+          <div class="start-hero">
+            <div class="icon-large"><i class="bi bi-cpu-fill"></i></div>
+            <h1>Motor Discovery</h1>
+            <p>
+              This wizard tests every motor channel on each Servo HAT.
+              When a motor moves, tell the system which body part it is.
+              At the end, the mapping is saved to your configuration.
+            </p>
+            <div class="hat-badges" id="hat-badges"></div>
+            <div style="color:var(--text-muted);font-size:0.8rem;margin-bottom:1.5rem">
+              <span id="total-channels">20</span> channels will be tested
+            </div>
+            <button class="test-btn" id="btn-start-discovery">
+              <i class="bi bi-play-fill"></i> Start Discovery
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCREEN 2: Test -->
+      <div class="screen" id="screen-test">
+        <div class="glass-card">
+          <div class="test-header">
+            <div class="step-label" id="test-progress">Channel 1 of 20</div>
+            <div class="progress-dark" style="flex:1;margin-left:1rem">
+              <div class="bar" id="test-bar" style="width:0%"></div>
+            </div>
+          </div>
+
+          <div class="channel-hero">
+            <div class="ch-label">Testing Channel</div>
+            <div class="ch-name">
+              <span class="hat-tag" id="hat-tag"></span>
+              <span id="ch-number">Channel 0</span>
+            </div>
+            <button class="test-btn" id="btn-test-nudge">
+              <i class="bi bi-arrow-left-right"></i> Test Motor
+            </button>
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem">
+              Watch which part of the robot moves
+            </div>
+          </div>
+
+          <div class="picker-section">
+            <div class="picker-title"><i class="bi bi-body-text"></i> What moved?</div>
+
+            <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.3rem">ARM</div>
+            <div class="picker-grid" id="picker-arm"></div>
+
+            <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.3rem">HAND</div>
+            <div class="picker-grid" id="picker-hand"></div>
+
+            <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.3rem">HEAD</div>
+            <div class="picker-grid" id="picker-head"></div>
+
+            <div class="custom-name-row">
+              <input type="text" class="form-control-dark" id="custom-name" placeholder="Custom name…">
+              <button class="btn-glass btn-accent" id="btn-custom-name"><i class="bi bi-plus-lg"></i> Use</button>
+            </div>
+
+            <div style="margin-top:0.75rem;text-align:center;font-size:0.8rem;color:var(--accent);font-weight:600;display:none" id="assigned-label"></div>
+          </div>
+
+          <div class="test-nav">
+            <button class="btn-glass" id="btn-test-prev" disabled><i class="bi bi-arrow-left"></i> Previous</button>
+            <button class="btn-glass btn-warning-glass" id="btn-test-skip"><i class="bi bi-skip-forward-fill"></i> Skip</button>
+            <button class="btn-glass btn-accent" id="btn-test-next">Next <i class="bi bi-arrow-right"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCREEN 3: Summary -->
+      <div class="screen" id="screen-summary">
+        <div class="glass-card">
+          <div class="section-title"><i class="bi bi-list-check"></i> Discovery Summary</div>
+          <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1rem">
+            Review all channel assignments. Click a card to re-test or rename.
+          </p>
+
+          <div class="summary-grid" id="summary-grid"></div>
+
+          <div class="summary-actions">
+            <button class="btn-glass" id="btn-restart"><i class="bi bi-arrow-clockwise"></i> Restart</button>
+            <button class="btn-glass btn-success-glass" id="btn-save-config" style="padding:0.75rem 2rem;font-size:1rem;font-weight:700">
+              <i class="bi bi-save-fill"></i> Save Configuration
+            </button>
+          </div>
+
+          <div class="save-result" id="save-result">
+            <i class="bi bi-check-circle-fill"></i>
+            <h3 style="margin:0.5rem 0">Configuration Saved!</h3>
+            <p style="color:var(--text-secondary);font-size:0.85rem">
+              servo_config.json has been updated.<br>
+              The server will reload with the new mapping.
+            </p>
+            <a href="/" class="btn-glass btn-accent" style="margin-top:1rem;text-decoration:none">
+              <i class="bi bi-arrow-right"></i> Go to Control Panel
+            </a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    const socket = io();
+
+    // Predefined body part options
+    const BODY_PARTS = {
+      arm: [
+        "Schulter_Horizontal", "Schulter_Vertikal", "Schulter_Vertikal_2",
+        "Oberarm", "Ellenbogen", "Unterarm"
+      ],
+      hand: [
+        "Handgelenk", "Daumen", "Daumen_Gelenk",
+        "Zeigefinger", "Mittelfinger", "Ringfinger", "Kleiner_Finger"
+      ],
+      head: ["Nacken"]
+    };
+
+    // State
+    let channels = [];       // [{brick, channel}, ...]
+    let assignments = {};    // "L:0" -> "Nacken"
+    let currentIdx = 0;
+    let isTesting = false;
+
+    // Build picker buttons
+    function buildPickers() {
+      for (const [group, parts] of Object.entries(BODY_PARTS)) {
+        const container = document.getElementById(`picker-${group}`);
+        container.innerHTML = "";
+        for (const part of parts) {
+          const btn = document.createElement("button");
+          btn.className = "picker-btn";
+          btn.textContent = part.replace(/_/g, " ");
+          btn.dataset.name = part;
+          btn.addEventListener("click", () => selectPart(part, btn));
+          container.appendChild(btn);
+        }
+      }
+    }
+
+    function selectPart(name, clickedBtn) {
+      // Deselect all
+      document.querySelectorAll(".picker-btn").forEach(b => b.classList.remove("selected"));
+      // Select this one
+      if (clickedBtn) clickedBtn.classList.add("selected");
+      document.getElementById("custom-name").value = "";
+
+      const key = channelKey(channels[currentIdx]);
+      assignments[key] = name;
+      showAssigned(name);
+    }
+
+    function showAssigned(name) {
+      const label = document.getElementById("assigned-label");
+      label.textContent = `✓ Assigned: ${name.replace(/_/g, " ")}`;
+      label.style.display = "block";
+    }
+
+    function channelKey(ch) { return `${ch.brick}:${ch.channel}`; }
+
+    // Screen management
+    function showScreen(id) {
+      document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+      document.getElementById(id).classList.add("active");
+    }
+
+    // ─── Start Screen ───
+    socket.on("discovery_channels", (data) => {
+      channels = data.channels;
+      const bricks = data.bricks;
+
+      // Show HAT badges
+      const badgesEl = document.getElementById("hat-badges");
+      badgesEl.innerHTML = "";
+      for (const [key, uid] of Object.entries(bricks)) {
+        badgesEl.innerHTML += `
+          <div class="hat-badge">
+            <span class="hat-dot hat-${key.toLowerCase()}"></span>
+            HAT ${key} <span style="color:var(--text-muted);font-family:'JetBrains Mono',monospace;font-size:0.75rem">(${uid})</span>
+          </div>
+        `;
+      }
+      document.getElementById("total-channels").textContent = channels.length;
+
+      // Init assignments
+      assignments = {};
+      currentIdx = 0;
+      showScreen("screen-test");
+      loadChannel(0);
+    });
+
+    document.getElementById("btn-start-discovery").addEventListener("click", () => {
+      socket.emit("discovery_start");
+      document.getElementById("btn-start-discovery").disabled = true;
+      document.getElementById("btn-start-discovery").innerHTML = '<span class="spinner-sm"></span> Loading…';
+    });
+
+    // ─── Test Screen ───
+    function loadChannel(idx) {
+      currentIdx = idx;
+      const ch = channels[idx];
+      const key = channelKey(ch);
+
+      // Update UI
+      document.getElementById("test-progress").textContent = `Channel ${idx + 1} of ${channels.length}`;
+      const pct = ((idx + 1) / channels.length * 100);
+      document.getElementById("test-bar").style.width = `${pct}%`;
+
+      const hatTag = document.getElementById("hat-tag");
+      hatTag.textContent = `HAT ${ch.brick}`;
+      hatTag.className = `hat-tag hat-tag-${ch.brick.toLowerCase()}`;
+      document.getElementById("ch-number").textContent = `Channel ${ch.channel}`;
+
+      // Reset picker selection
+      document.querySelectorAll(".picker-btn").forEach(b => b.classList.remove("selected"));
+      document.getElementById("custom-name").value = "";
+
+      // Show existing assignment if any
+      const assigned = assignments[key];
+      const label = document.getElementById("assigned-label");
+      if (assigned) {
+        showAssigned(assigned);
+        // Highlight the matching picker button
+        document.querySelectorAll(".picker-btn").forEach(b => {
+          if (b.dataset.name === assigned) b.classList.add("selected");
+        });
+      } else {
+        label.style.display = "none";
+      }
+
+      // Grey out already-used names
+      const usedNames = new Set(Object.values(assignments));
+      document.querySelectorAll(".picker-btn").forEach(b => {
+        const isUsedElsewhere = usedNames.has(b.dataset.name) && assignments[key] !== b.dataset.name;
+        b.style.opacity = isUsedElsewhere ? "0.35" : "1";
+        b.title = isUsedElsewhere ? `Already assigned to another channel` : "";
+      });
+
+      // Nav buttons
+      document.getElementById("btn-test-prev").disabled = idx === 0;
+      const nextBtn = document.getElementById("btn-test-next");
+      nextBtn.innerHTML = idx === channels.length - 1
+        ? 'Review <i class="bi bi-check2-all"></i>'
+        : 'Next <i class="bi bi-arrow-right"></i>';
+
+      // Reset test button
+      const testBtn = document.getElementById("btn-test-nudge");
+      testBtn.disabled = false;
+      testBtn.classList.remove("testing");
+      testBtn.innerHTML = '<i class="bi bi-arrow-left-right"></i> Test Motor';
+    }
+
+    document.getElementById("btn-test-nudge").addEventListener("click", () => {
+      const ch = channels[currentIdx];
+      const testBtn = document.getElementById("btn-test-nudge");
+      testBtn.disabled = true;
+      testBtn.classList.add("testing");
+      testBtn.innerHTML = '<span class="spinner-sm"></span> Moving…';
+      socket.emit("discovery_test", { brick: ch.brick, channel: ch.channel });
+    });
+
+    socket.on("discovery_test_done", (data) => {
+      const testBtn = document.getElementById("btn-test-nudge");
+      testBtn.disabled = false;
+      testBtn.classList.remove("testing");
+      if (data.ok) {
+        testBtn.innerHTML = '<i class="bi bi-arrow-left-right"></i> Test Again';
+      } else {
+        testBtn.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Error — Try Again';
+      }
+    });
+
+    document.getElementById("btn-custom-name").addEventListener("click", () => {
+      const input = document.getElementById("custom-name");
+      const name = input.value.trim().replace(/\s+/g, "_");
+      if (!name) { alert("Enter a name."); return; }
+      document.querySelectorAll(".picker-btn").forEach(b => b.classList.remove("selected"));
+      const key = channelKey(channels[currentIdx]);
+      assignments[key] = name;
+      showAssigned(name);
+    });
+
+    document.getElementById("btn-test-prev").addEventListener("click", () => {
+      if (currentIdx > 0) loadChannel(currentIdx - 1);
+    });
+
+    document.getElementById("btn-test-skip").addEventListener("click", () => {
+      // Clear any assignment for this channel
+      const key = channelKey(channels[currentIdx]);
+      delete assignments[key];
+      if (currentIdx < channels.length - 1) {
+        loadChannel(currentIdx + 1);
+      } else {
+        showSummary();
+      }
+    });
+
+    document.getElementById("btn-test-next").addEventListener("click", () => {
+      if (currentIdx < channels.length - 1) {
+        loadChannel(currentIdx + 1);
+      } else {
+        showSummary();
+      }
+    });
+
+    // ─── Summary Screen ───
+    function showSummary() {
+      showScreen("screen-summary");
+      const grid = document.getElementById("summary-grid");
+      grid.innerHTML = "";
+
+      for (let i = 0; i < channels.length; i++) {
+        const ch = channels[i];
+        const key = channelKey(ch);
+        const name = assignments[key];
+
+        const card = document.createElement("div");
+        card.className = "summary-card";
+        card.innerHTML = `
+          <div class="sc-header">
+            <span class="hat-tag hat-tag-${ch.brick.toLowerCase()}" style="font-size:0.65rem;padding:0.1rem 0.35rem">HAT ${ch.brick}</span>
+            CH ${ch.channel}
+          </div>
+          <div class="sc-name ${name ? '' : 'unassigned'}">${name ? name.replace(/_/g, " ") : "— Not assigned —"}</div>
+          <div class="sc-actions">
+            <button class="btn-glass" style="font-size:0.7rem;padding:0.2rem 0.5rem" data-idx="${i}" data-action="retest">
+              <i class="bi bi-arrow-left-right"></i> Re-test
+            </button>
+            <button class="btn-glass" style="font-size:0.7rem;padding:0.2rem 0.5rem" data-idx="${i}" data-action="rename">
+              <i class="bi bi-pencil"></i> Rename
+            </button>
+          </div>
+        `;
+        grid.appendChild(card);
+      }
+
+      // Bind summary card actions
+      grid.querySelectorAll("[data-action='retest']").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const idx = parseInt(btn.dataset.idx);
+          showScreen("screen-test");
+          loadChannel(idx);
+        });
+      });
+
+      grid.querySelectorAll("[data-action='rename']").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const idx = parseInt(btn.dataset.idx);
+          const ch = channels[idx];
+          const key = channelKey(ch);
+          const current = assignments[key] || "";
+          const newName = prompt(
+            `Rename HAT ${ch.brick} · Channel ${ch.channel}\nCurrent: ${current.replace(/_/g, " ") || "(none)"}`,
+            current.replace(/_/g, " ")
+          );
+          if (newName !== null) {
+            const cleaned = newName.trim().replace(/\s+/g, "_");
+            if (cleaned) {
+              assignments[key] = cleaned;
+            } else {
+              delete assignments[key];
+            }
+            showSummary(); // Refresh
+          }
+        });
+      });
+
+      // Hide save result
+      document.getElementById("save-result").classList.remove("show");
+    }
+
+    document.getElementById("btn-restart").addEventListener("click", () => {
+      if (!confirm("Restart discovery? Current assignments will be lost.")) return;
+      showScreen("screen-start");
+      document.getElementById("btn-start-discovery").disabled = false;
+      document.getElementById("btn-start-discovery").innerHTML = '<i class="bi bi-play-fill"></i> Start Discovery';
+    });
+
+    document.getElementById("btn-save-config").addEventListener("click", () => {
+      const entries = [];
+      for (const [key, name] of Object.entries(assignments)) {
+        const [brick, ch] = key.split(":");
+        entries.push({ brick, channel: parseInt(ch), name });
+      }
+      if (entries.length === 0) {
+        alert("No motors were assigned. Please assign at least one motor.");
+        return;
+      }
+      socket.emit("discovery_save", { assignments: entries });
+      document.getElementById("btn-save-config").disabled = true;
+      document.getElementById("btn-save-config").innerHTML = '<span class="spinner-sm"></span> Saving…';
+    });
+
+    socket.on("discovery_saved", (data) => {
+      document.getElementById("btn-save-config").disabled = false;
+      document.getElementById("btn-save-config").innerHTML = '<i class="bi bi-save-fill"></i> Save Configuration';
+      if (data.ok) {
+        document.getElementById("save-result").classList.add("show");
+      } else {
+        alert("Error saving: " + (data.error || "Unknown error"));
+      }
+    });
+
+    // ─── Init ───
+    buildPickers();
+    console.log("Motor Discovery initialized");
+  </script>
+</body>
+</html>

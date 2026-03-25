@@ -30,9 +30,9 @@ Professional web-based control interface for Tinkerforge servo-controlled humano
 - Fine-tune controls (±1°, ±10°)
 
 ⌨️ **Keyboard Shortcuts**
-- `Ctrl/Cmd + E`: Emergency stop
-- `Ctrl/Cmd + Z`: Zero all servos
-- `Ctrl/Cmd + R`: Refresh positions
+- `Alt + E`: Emergency stop
+- `Alt + Z`: Zero all servos
+- `Alt + R`: Refresh positions
 
 ## Setup
 
@@ -62,7 +62,7 @@ python app.py
 
 ### 4. Open the Control Panel
 
-Navigate to: **http://localhost:5000**
+Navigate to: **http://localhost:5001**
 
 ## Project Structure
 
@@ -82,9 +82,9 @@ pib/
 
 The interface automatically categorizes servos:
 
-**Hand (Green)**: Daumen, Zeigefinger, Mittelfinger, Ringfinger, Kleiner Finger  
-**Arm (Yellow)**: Ellbogen, Unterarm, Bizeps, Schulter Vertikal, Schulter Horizontal  
-**Head (Purple)**: Hals, Nacken
+**Hand (Green)**: Daumen, Daumen_Gelenk, Zeigefinger, Mittelfinger, Ringfinger, Kleiner_Finger, Handgelenk  
+**Arm (Yellow)**: Ellenbogen, Unterarm, Oberarm, Schulter_Vertikal, Schulter_Horizontal  
+**Head (Purple)**: Nacken
 
 ## Configuration
 
@@ -132,6 +132,8 @@ The Socket.IO backend supports:
 - `emergency_stop`: Disable all servos
 - `enable_all`: Enable/disable all at once
 - `zero_all`: Move all to 0°
+- `set_trim`: Set calibration trim offset
+- `wave_motion`: Wave animation
 
 ## Troubleshooting
 

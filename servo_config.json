@@ -4,70 +4,45 @@
     "R": "29Fe"
   },
   "servos": {
-    "Handgelenk": {
+    "Kleiner_Finger": {
       "brick": "L",
-      "uid": "2h65",
-      "channel": 0
-    },
-    "Ellenbogen": {
-      "brick": "L",
-      "uid": "2h65",
-      "channel": 2
-    },
-    "Unterarm": {
-      "brick": "L",
-      "uid": "2h65",
-      "channel": 4
-    },
-    "Hals": {
-      "brick": "L",
-      "uid": "2h65",
-      "channel": 5
-    },
-    "Schulter_Vertikal": {
-      "brick": "L",
-      "uid": "2h65",
-      "channel": 6
-    },
-    "Schulter_Horizontal": {
-      "brick": "L",
-      "uid": "2h65",
-      "channel": 7
-    },
-    "Oberarm": {
-      "brick": "L",
-      "uid": "2h65",
-      "channel": 8
-    },
-    "Daumen": {
-      "brick": "R",
-      "uid": "29Fe",
       "channel": 0
     },
     "Daumen_Gelenk": {
-      "brick": "R",
-      "uid": "29Fe",
-      "channel": 1
-    },
-    "Zeigefinger": {
-      "brick": "R",
-      "uid": "29Fe",
-      "channel": 4
+      "brick": "L",
+      "channel": 2
     },
     "Mittelfinger": {
-      "brick": "R",
-      "uid": "29Fe",
+      "brick": "L",
+      "channel": 4
+    },
+    "Handgelenk": {
+      "brick": "L",
       "channel": 5
     },
-    "Ringfinger": {
-      "brick": "R",
-      "uid": "29Fe",
+    "Daumen": {
+      "brick": "L",
+      "channel": 7
+    },
+    "Zeigefinger": {
+      "brick": "L",
       "channel": 8
     },
-    "Kleiner_Finger": {
-      "brick": "R",
-      "uid": "29Fe",
+    "Ringfinger": {
+      "brick": "L",
       "channel": 9
+    },
+    "Nacken": {
+      "brick": "R",
+      "channel": 0
+    },
+    "Schulter_Horizontal": {
+      "brick": "R",
+      "channel": 4
+    },
+    "Oberarm": {
+      "brick": "R",
+      "channel": 8
     }
   }
 }
