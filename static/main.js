@@ -358,6 +358,7 @@ socket.on("wave_complete", () => {
 });
 
 socket.on("current_update", (data) => {
+  console.log("Current",data)
   // Update total current at top
   const currentDisplay = document.getElementById("current-display");
   const currentValue = document.getElementById("current-value");
@@ -376,7 +377,7 @@ socket.on("current_update", (data) => {
 });
 
 // Button handlers
-btnStop.addEventListener("click", () => {
+btnStop?.addEventListener("click", () => {
   if (!confirm("⚠️ This will immediately cut power to ALL servos!\n\nAre you sure?")) return;
   Object.values(servos).forEach(s => {
     if (s.ui && s.ui.card) s.ui.card.classList.add("card-pending");
@@ -384,30 +385,30 @@ btnStop.addEventListener("click", () => {
   socket.emit("emergency_stop");
 });
 
-btnEnableAll.addEventListener("click", () => {
+btnEnableAll?.addEventListener("click", () => {
   Object.values(servos).forEach(s => {
     if (s.ui && s.ui.card) s.ui.card.classList.add("card-pending");
   });
   socket.emit("enable_all", {enable: true});
 });
 
-btnDisableAll.addEventListener("click", () => {
+btnDisableAll?.addEventListener("click", () => {
   Object.values(servos).forEach(s => {
     if (s.ui && s.ui.card) s.ui.card.classList.add("card-pending");
   });
   socket.emit("enable_all", {enable: false});
 });
 
-btnZeroAll.addEventListener("click", () => {
+btnZeroAll?.addEventListener("click", () => {
   if (!confirm("Move all servos to 0° position?")) return;
   socket.emit("zero_all");
 });
 
-btnWave.addEventListener("click", () => {
+btnWave?.addEventListener("click", () => {
   socket.emit("wave_motion");
 });
 
-btnRefresh.addEventListener("click", () => {
+btnRefresh?.addEventListener("click", () => {
   socket.emit("get_positions");
 });
 
@@ -433,7 +434,7 @@ function refreshPresetList() {
   }
 }
 
-loadPresetBtn.addEventListener("click", () => {
+loadPresetBtn?.addEventListener("click", () => {
   const name = presetList.value;
   if (!name) {
     alert("Please select a preset to load.");
@@ -455,7 +456,7 @@ loadPresetBtn.addEventListener("click", () => {
   console.log(`Loaded preset: ${name}`);
 });
 
-savePresetBtn.addEventListener("click", () => {
+savePresetBtn?.addEventListener("click", () => {
   const name = presetNameInput.value.trim();
   if (!name) {
     alert("Please enter a preset name.");
@@ -479,7 +480,7 @@ savePresetBtn.addEventListener("click", () => {
   alert(`✓ Preset "${name}" saved successfully!`);
 });
 
-deletePresetBtn.addEventListener("click", () => {
+deletePresetBtn?.addEventListener("click", () => {
   const name = presetList.value;
   if (!name) {
     alert("Please select a preset to delete.");

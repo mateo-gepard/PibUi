@@ -30,6 +30,8 @@ state = {
     "ipcon": None
 }
 state_lock = threading.Lock()
+monitor_thread = None
+monitor_lock = threading.Lock()
 
 # Helpers
 def load_config():
@@ -91,6 +93,8 @@ def safe_set_position(name, degree, duration_ms=300):
         brick.set_degree(ch, s["min_cdeg"], s["max_cdeg"])
         brick.set_pulse_width(ch, 500, 2500)
         brick.set_period(ch, 20000)
+        # Set velocity, acceleration, and deceleration for smooth, slower movements
+        brick.set_motion_configuration(ch, 15000, 15000, 15000)
         brick.set_position(ch, target_cdeg)
         with state_lock:
             s["position_cdeg"] = target_cdeg
@@ -117,19 +121,26 @@ def get_current_readings():
         return {"currents": currents, "total": total_current}
     
     try:
+        brick_statuses = {}  # Cache statuses per brick to avoid multiple I/O calls
+        failed_bricks = set()  # Track failed bricks to prevent repeated timeouts in the same cycle
         for name, servo_info in servos.items():
             brick_key = servo_info["brick"]
             ch = servo_info["channel"]
             brick = bricks.get(brick_key)
-            if brick:
-                status = brick.get_status()
-                # status is a named tuple; access current field
-                current = status.current if hasattr(status, 'current') else 0
-                # Handle case where current might be a tuple or named tuple
-                if isinstance(current, (list, tuple)):
-                    current = current[0] if current else 0
-                currents[name] = int(current)
-                total_current += int(current)
+            if brick and brick_key not in failed_bricks:
+                try:
+                    if brick_key not in brick_statuses:
+                        brick_statuses[brick_key] = brick.get_status()
+                    current = brick_statuses[brick_key].current[ch]
+                    currents[name] = int(current)
+                    total_current += int(current)
+                except Exception as e:
+                    failed_bricks.add(brick_key)
+                    # Only print once per failed brick and simplify the timeout message
+                    if "in time (-1)" in str(e):
+                        print(f"Timeout reading current for brick '{brick_key}' (skipping remaining servos on this brick)")
+                    else:
+                        print(f"Error reading current for {name}: {e}")
     except Exception as e:
         print(f"Error reading current: {e}")
     
@@ -155,6 +166,18 @@ def set_enable(name, enable):
         with state_lock:
             current_enabled = s["enabled"]
         return {"ok": False, "error": str(e), "enabled": current_enabled}
+
+# Background Monitor
+def current_monitor():
+    """Background thread to continuously broadcast current readings"""
+    while True:
+        try:
+            current_data = get_current_readings()
+            socketio.emit("current_update", current_data, namespace="/")
+            socketio.sleep(0.5)  # Update every 500ms
+        except Exception as e:
+            print(f"Error in current monitor: {e}")
+            socketio.sleep(1)
 
 # Flask routes
 @app.route("/")
@@ -186,6 +209,11 @@ def config_json():
 # Socket.IO events
 @socketio.on("connect")
 def handle_connect():
+    global monitor_thread
+    with monitor_lock:
+        if monitor_thread is None:
+            monitor_thread = socketio.start_background_task(current_monitor)
+            
     emit("status", {"connected": state["connected"], "mock": state["mock"]})
     emit("config", {"servos": {k: {
         "brick": v["brick"],
@@ -250,7 +278,7 @@ def on_enable_all(data):
             
             # Small delay between each motor
             if idx < total:
-                time.sleep(0.05)
+                socketio.sleep(0.05)
         
         # Final completion signal
         socketio.emit("all_enabled", {}, namespace="/")
@@ -262,8 +290,7 @@ def on_enable_all(data):
     })
     
     # Run in background thread to avoid blocking
-    thread = threading.Thread(target=enable_sequence, daemon=True)
-    thread.start()
+    socketio.start_background_task(enable_sequence)
 
 @socketio.on("zero_all")
 def on_zero_all():
@@ -276,8 +303,6 @@ def on_zero_all():
 
 @socketio.on("wave_motion")
 def on_wave_motion():
-    """Execute a waving motion sequence"""
-    import threading
     
     def wave_sequence():
         # Wave sequence - adjust servo names and angles for your robot
@@ -297,13 +322,12 @@ def on_wave_motion():
             for servo_name, angles in wave_servos.items():
                 if servo_name in state["servos"]:
                     safe_set_position(servo_name, angles[step])
-            time.sleep(0.4)  # Delay between steps
+            socketio.sleep(0.4)  # Delay between steps
         
         socketio.server.emit("wave_complete", {}, namespace="/")
     
     # Run wave in background thread
-    thread = threading.Thread(target=wave_sequence, daemon=True)
-    thread.start()
+    socketio.start_background_task(wave_sequence)
     emit("wave_started", {})
 
 # Startup
@@ -319,17 +343,4 @@ if __name__ == "__main__":
     print(f"✓ Server starting on http://0.0.0.0:5001")
     print(f"  Servos loaded: {len(state['servos'])}")
     print(f"  Mode: {'Mock' if state['mock'] else 'Hardware'}")
-    
-    #WIP 
-    def current_monitor():
-        """Background thread to continuously broadcast current readings"""
-        while True:
-            try:
-                current_data = get_current_readings()
-                socketio.emit("current_update", current_data, namespace="/")
-                time.sleep(0.5)  # Update every 500ms
-            except Exception as e:
-                print(f"Error in current monitor: {e}")
-                time.sleep(1)
-    
     socketio.run(app, host="0.0.0.0", port=5001, debug=True)
